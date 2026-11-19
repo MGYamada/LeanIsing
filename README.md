@@ -2,8 +2,8 @@
 
 Lean 4 だけで書いた 2 次元 Ising 模型の Metropolis 法シミュレーションです。
 乱数も確率もすべて**厳密な有理数**（Lean core の `Rat`）で扱い、浮動小数点数は一切使いません。
-そのうえで、**シミュレーションが実際に動かしているマルコフ連鎖**が詳細釣り合いとエルゴード性を満たすことを、
-Lean のカーネルで証明しています。
+そのうえで、**シミュレーションが実際に動かしているマルコフ連鎖**が詳細釣り合いとエルゴード性を満たし、
+任意の初期分布から Boltzmann 分布へ（幾何的に）収束することを、Lean のカーネルで証明しています。
 
 - シミュレーション本体、乱数生成器、証明、ビルド設定（`lakefile.lean`）まで、すべて Lean で書いています。
 - 外部ライブラリには依存しません（Lean core だけを使います。Mathlib も使いません）。
@@ -75,7 +75,8 @@ exp(-βE(σ)) = exp(βJ·|bonds|) · x ^ (不満足ボンドの数)
 
 ## 何が証明されているか
 
-主定理は [`Proofs/Theorems.lean`](Proofs/Theorems.lean) にあります。いちばん強い形は次のとおりです。
+主定理は [`Proofs/Theorems.lean`](Proofs/Theorems.lean) と [`Proofs/Convergence.lean`](Proofs/Convergence.lean) にあります。
+正方格子でのいちばん強い形は次の 2 つです。
 
 ```lean
 /-- L ≥ 2、0 < x < 1 なら、シミュレーションが動かしている連鎖は
@@ -84,6 +85,13 @@ theorem square_simulation (L : Nat) (hL : 2 ≤ L) (x : Rat) (hx0 : 0 < x) (hx1 
     Chain.DetailedBalance (boltzmann (Lattice.square L) x)
         (inducedKernel (Lattice.square L) x (Sim.make (Lattice.square L) x).D) ∧
       Chain.Ergodic (inducedKernel (Lattice.square L) x (Sim.make (Lattice.square L) x).D)
+
+/-- 同じ条件で、その連鎖は任意の初期分布から Boltzmann 分布へ幾何的に収束する。 -/
+theorem square_simulation_converges (L : Nat) (hL : 2 ≤ L) (x : Rat) (hx0 : 0 < x) (hx1 : x < 1) :
+    Chain.GeometricConvergence (boltzmann (Lattice.square L) x)
+        (inducedKernel (Lattice.square L) x (Sim.make (Lattice.square L) x).D) ∧
+      Chain.Converges (boltzmann (Lattice.square L) x)
+        (inducedKernel (Lattice.square L) x (Sim.make (Lattice.square L) x).D)
 ```
 
 ここで `inducedKernel G x D σ τ` は、**実装の 1 ステップ `step`** に一様乱数（サイト `i ∈ Fin n` と `u = k/D`）を与えたとき、
@@ -97,18 +105,21 @@ theorem square_simulation (L : Nat) (hL : 2 ≤ L) (x : Rat) (hx0 : 0 < x) (hx1 
 | `metropolis_stationary` | Boltzmann 分布は定常分布 `πP = π` | 任意のグラフ、`0 < x` |
 | `metropolis_irreducible` | **既約性**：どの配位からどの配位へも `n` ステップ以内に正の確率で移れる | 任意のグラフ、`0 < x` |
 | `metropolis_ergodic` | **エルゴード性**：`m ≥ 2n` のどの `m` でも、すべての `P^m(σ→τ)` が正 | `0 < x < 1`、自己ループでないボンドが 1 本以上 |
+| `metropolis_geometric` | **幾何収束**：任意の初期分布 `μ` で `Σ_τ \|μP^t(τ) − π(τ)\| ≤ 2ρ^⌊t/m⌋`（`m > 0`、`0 ≤ ρ < 1`） | 同上 |
+| `metropolis_converges` | **収束**：任意の初期分布 `μ` で `μP^t(τ) → π(τ)`（`t → ∞`） | 同上 |
 | `simulation_exact` | 実装の遷移確率 `inducedKernel` = 仕様の核 `kernel` | 任意のグラフ、`0 < x ≤ 1` |
 | `simulation_*` | 上の性質を実装の連鎖について | 同上 |
 | `rejection_exact` | 乱数の棄却法は各値をちょうど同じ回数出す | |
 
 エルゴード性は、有限状態マルコフ連鎖としての正則性（既約かつ非周期的）として述べています。
-これと定常性から、Boltzmann 分布が唯一の定常分布であり、任意の初期配位から Boltzmann 分布へ収束することが従います（Perron–Frobenius）。
+定常分布への収束は Perron–Frobenius の定理を使わずに、Doeblin の議論で直接証明しています（下の「証明のしくみ」）。
+収束先が Boltzmann 分布なので、定常分布が Boltzmann 分布だけであることもここから直ちに従います（定理としては述べていません）。
 なお `x = 1`（無限温度）では、すべての反転が受理されるため連鎖は周期 2 になり、エルゴード性は成り立ちません
 （既約性は成り立ちます）。テストでこれも確かめています。
 
 ### 前提（信頼する部分）
 
-定理の意味は [`LeanIsing/Spec.lean`](LeanIsing/Spec.lean)（約 130 行）だけで決まります。
+定理の意味は [`LeanIsing/Spec.lean`](LeanIsing/Spec.lean)（約 160 行）だけで決まります。
 
 - `Graph`：サイト `Fin n` とボンドのリスト。`Config n = Vector Bool n`（`true` が上向き）。
 - `unsat σ`：両端が逆向きのボンドの数。エネルギーは `E = 2·unsat − |bonds|`。
@@ -117,6 +128,8 @@ theorem square_simulation (L : Nat) (hL : 2 ≤ L) (x : Rat) (hx0 : 0 < x) (hx1 
 - `kernel G x σ τ`：サイト `i` を確率 `1/n` で選び、確率 `accept` で反転、さもなくばとどまる、の遷移確率。
 - `Chain.Stochastic` / `DetailedBalance` / `Stationary` / `Irreducible` / `Ergodic`：一般の遷移行列についての性質。
   `Chain.pow P m` は遷移行列の `m` 乗。
+- `Chain.IsDistribution`（非負で総和 1）、`Chain.evolve P μ t`（`t` ステップ後の分布 `μP^t`）、
+  `Chain.l1Dist`（L¹ 距離）、`Chain.Converges` / `GeometricConvergence`：収束の主張。
 
 加えて、`inducedKernel`（[`LeanIsing/Engine.lean`](LeanIsing/Engine.lean)）が「シミュレーションの 1 ステップの遷移確率」であることを信頼します。
 シミュレーション `Sim.stepM` は、乱数 `i`、`k` を引いて `Sim.stepPure` を呼ぶだけで、その結果が
@@ -130,6 +143,7 @@ theorem square_simulation (L : Nat) (hL : 2 ≤ L) (x : Rat) (hx0 : 0 < x) (hx1 
 ```
 Spec（仕様：Boltzmann 分布と Metropolis 核）
   ▲  detailed_balance / stationary / irreducible / ergodic       (Proofs/DetailedBalance, Ergodicity)
+  ▲  metropolis_geometric / metropolis_converges                  (Proofs/Convergence)
   ▲  inducedKernel_eq：実装の遷移確率 = 仕様の核                   (Proofs/Exactness)
 Engine（実装：近傍だけで受理確率を計算し、u = k/D と厳密比較）
 ```
@@ -141,6 +155,12 @@ Engine（実装：近傍だけで受理確率を計算し、u = k/D と厳密比
 - **エルゴード性**：全上向き配位でボンドの端点を反転すると不満足ボンドが増えるので、受理確率は `x^k < 1`、
   つまりその場にとどまる確率が正です。`σ → 全上向き（≤ n 歩）→ 足踏み → τ（≤ n 歩）` とつなぐと、
   `2n` 以上のどのステップ数でも正の確率で `σ` から `τ` に移れます。
+- **収束**（Doeblin の議論）：`P^m`（`m = 2n`）の全成分の共通の下界 `δ > 0` をとると、和が 0 のベクトル `v` について
+  `Σ_τ |(vP^m)(τ)| ≤ (1 − Nδ) Σ_σ |v(σ)|` が成り立ちます（`N = 2^n`、`l1_contract`）。
+  `(vP^m)(τ) = Σ_σ v(σ)(P^m(σ→τ) − δ)` と書き直して三角不等式を使うだけです。
+  `v = μP^t − π` は和が 0 で、定常性から `μP^{t+m} − π = (μP^t − π)P^m` なので、`m` ステップごとに
+  距離が `ρ = 1 − Nδ < 1` 倍以下に縮みます（`geometric_of_primitive`）。`ρ^k → 0` は Bernoulli の不等式から従います。
+  この部分は、確率行列・定常分布・ある `m > 0` での `P^m > 0` だけを仮定する、一般の有限マルコフ連鎖の定理です。
 - **実装の厳密性**：(1) 反転による不満足ボンドの変化は近傍だけで決まる（`unsat_flip`）、
   (2) したがって近傍から計算した受理確率は仕様の `min(1, w'/w)` に等しい（`acceptLocal_eq`）、
   (3) `D` の選び方から `受理確率 × D` は整数で、`k/D < 受理確率` となる `k` はちょうどその個数（`count_site`）。
@@ -149,13 +169,13 @@ Engine（実装：近傍だけで受理確率を計算し、u = k/D と厳密比
 
 主定理は Lean の標準公理 `propext`・`Classical.choice`・`Quot.sound` だけに依存します
 （`Rat` の補題や `simp`・`grind`・`omega` がこれらを使うため。leankoban のような公理ゼロではありません）。
-[`Proofs/Audit.lean`](Proofs/Audit.lean) が `lake build` のたびに、10 個の主定理の**主張が期待どおりであること**と、
+[`Proofs/Audit.lean`](Proofs/Audit.lean) が `lake build` のたびに、14 個の主定理の**主張が期待どおりであること**と、
 主定理と補助定理が**標準公理以外（`sorryAx`、`native_decide` の `Lean.ofReduceBool` など）に依存しないこと**を検査し、
 違反があればビルドを失敗させます。
 
 ```sh
 lake build Proofs.Audit
-# info: 監査 OK: 10 個の主定理の主張は期待どおりで、これらと補助定理 8 個は
+# info: 監査 OK: 14 個の主定理の主張は期待どおりで、これらと補助定理 12 個は
 #       標準公理（propext, Classical.choice, Quot.sound）だけに依存する（sorry・native_decide なし）。
 ```
 
@@ -174,6 +194,7 @@ Proofs/Lemmas.lean             反転・全配位・和の補題
 Proofs/DetailedBalance.lean    詳細釣り合い・確率行列・定常性
 Proofs/Ergodicity.lean         既約性・エルゴード性
 Proofs/Exactness.lean          実装の遷移確率 = 仕様の核
+Proofs/Convergence.lean        定常分布への幾何収束（Doeblin の議論）
 Proofs/Theorems.lean           主定理（実装・正方格子への適用、棄却法）
 Proofs/Audit.lean              主張と公理の監査
 Tests/EngineTests.lean         小さな系での数値検査（ビルド時に評価する #guard）

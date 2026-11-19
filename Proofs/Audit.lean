@@ -71,6 +71,24 @@ run_cmd do
               (LeanIsing.Engine.Sim.make (LeanIsing.Lattice.square L) x).D) ∧
           LeanIsing.Chain.Ergodic (LeanIsing.Engine.inducedKernel (LeanIsing.Lattice.square L) x
               (LeanIsing.Engine.Sim.make (LeanIsing.Lattice.square L) x).D))),
+    (``LeanIsing.Proofs.metropolis_geometric,
+      ← `(∀ (G : LeanIsing.Graph) (x : Rat), 0 < x → x < 1 → (∃ b ∈ G.bonds, b.1 ≠ b.2) →
+        LeanIsing.Chain.GeometricConvergence (LeanIsing.boltzmann G x) (LeanIsing.kernel G x))),
+    (``LeanIsing.Proofs.metropolis_converges,
+      ← `(∀ (G : LeanIsing.Graph) (x : Rat), 0 < x → x < 1 → (∃ b ∈ G.bonds, b.1 ≠ b.2) →
+        LeanIsing.Chain.Converges (LeanIsing.boltzmann G x) (LeanIsing.kernel G x))),
+    (``LeanIsing.Proofs.simulation_converges,
+      ← `(∀ (G : LeanIsing.Graph) (x : Rat), 0 < x → x < 1 → (∃ b ∈ G.bonds, b.1 ≠ b.2) →
+        LeanIsing.Chain.Converges (LeanIsing.boltzmann G x)
+          (LeanIsing.Engine.inducedKernel G x (LeanIsing.Engine.Sim.make G x).D))),
+    (``LeanIsing.Proofs.square_simulation_converges,
+      ← `(∀ (L : Nat), 2 ≤ L → ∀ (x : Rat), 0 < x → x < 1 →
+        LeanIsing.Chain.GeometricConvergence (LeanIsing.boltzmann (LeanIsing.Lattice.square L) x)
+            (LeanIsing.Engine.inducedKernel (LeanIsing.Lattice.square L) x
+              (LeanIsing.Engine.Sim.make (LeanIsing.Lattice.square L) x).D) ∧
+          LeanIsing.Chain.Converges (LeanIsing.boltzmann (LeanIsing.Lattice.square L) x)
+            (LeanIsing.Engine.inducedKernel (LeanIsing.Lattice.square L) x
+              (LeanIsing.Engine.Sim.make (LeanIsing.Lattice.square L) x).D))),
     (``LeanIsing.Proofs.rejection_exact,
       ← `(∀ (M m k : Nat), k < m →
         (List.range' (M % m) (M - M % m)).countP (fun w => (w - M % m) % m == k) = M / m))
@@ -80,7 +98,9 @@ run_cmd do
   let others := [``LeanIsing.Proofs.simulation_stochastic, ``LeanIsing.Proofs.simulation_stationary,
     ``LeanIsing.Proofs.simulation_irreducible, ``LeanIsing.Proofs.ergodic_from,
     ``LeanIsing.Proofs.irreducible_within, ``LeanIsing.Proofs.Sim.stepPure_fst,
-    ``LeanIsing.Proofs.unsat_flip, ``LeanIsing.Proofs.acceptLocal_eq]
+    ``LeanIsing.Proofs.unsat_flip, ``LeanIsing.Proofs.acceptLocal_eq,
+    ``LeanIsing.Proofs.simulation_geometric, ``LeanIsing.Proofs.geometric_of_primitive,
+    ``LeanIsing.Proofs.converges_of_geometric, ``LeanIsing.Proofs.l1_contract]
   for thm in checks.map (·.1) ++ others do
     checkAxioms thm
   logInfo m!"監査 OK: {checks.length} 個の主定理の主張は期待どおりで、これらと補助定理 {others.length} 個は\

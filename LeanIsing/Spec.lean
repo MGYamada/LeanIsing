@@ -128,6 +128,35 @@ def Irreducible (P : Config n → Config n → Rat) : Prop :=
 def Ergodic (P : Config n → Config n → Rat) : Prop :=
   ∃ m, ∀ σ τ, 0 < pow P m σ τ
 
+/-! ### 収束 -/
+
+/-- 確率分布：非負で総和が 1。 -/
+def IsDistribution (μ : Config n → Rat) : Prop :=
+  (∀ σ, 0 ≤ μ σ) ∧ ((allConfigs n).map μ).sum = 1
+
+/-- 分布 `μ` から `t` ステップ後の分布 `μP^t`、すなわち `(μP^t)(τ) = Σ_σ μ(σ) P^t(σ → τ)`。 -/
+def evolve (P : Config n → Config n → Rat) (μ : Config n → Rat) (t : Nat) (τ : Config n) : Rat :=
+  ((allConfigs n).map fun σ => μ σ * pow P t σ τ).sum
+
+/-- 有理数の絶対値。 -/
+def absQ (q : Rat) : Rat := if q < 0 then -q else q
+
+/-- 2 つの分布の L¹ 距離 `Σ_τ |μ(τ) - ν(τ)|`（全変動距離の 2 倍）。 -/
+def l1Dist (μ ν : Config n → Rat) : Rat :=
+  ((allConfigs n).map fun τ => absQ (μ τ - ν τ)).sum
+
+/-- 収束：任意の初期分布 `μ` について、`t` ステップ後の分布 `μP^t` は `t → ∞` で `π` に収束する。
+（どの `ε > 0` に対しても、十分大きなすべての `t` で、すべての配位 `τ` について `|μP^t(τ) - π(τ)| < ε`。） -/
+def Converges (π : Config n → Rat) (P : Config n → Config n → Rat) : Prop :=
+  ∀ μ, IsDistribution μ → ∀ ε : Rat, 0 < ε → ∃ T : Nat, ∀ t, T ≤ t → ∀ τ,
+    π τ - ε < evolve P μ t τ ∧ evolve P μ t τ < π τ + ε
+
+/-- 幾何収束：ある `m > 0` と `0 ≤ ρ < 1` があって、任意の初期分布 `μ` と任意の `t` について
+`Σ_τ |μP^t(τ) - π(τ)| ≤ 2 ρ^⌊t/m⌋`。初期分布によらない一様な指数的収束である。 -/
+def GeometricConvergence (π : Config n → Rat) (P : Config n → Config n → Rat) : Prop :=
+  ∃ m : Nat, 0 < m ∧ ∃ ρ : Rat, 0 ≤ ρ ∧ ρ < 1 ∧
+    ∀ μ, IsDistribution μ → ∀ t, l1Dist (evolve P μ t) π ≤ 2 * ρ ^ (t / m)
+
 end Chain
 
 end LeanIsing

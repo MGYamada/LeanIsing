@@ -1,6 +1,7 @@
 import LeanIsing.Lattice
 import Proofs.Ergodicity
 import Proofs.Exactness
+import Proofs.Convergence
 
 /-!
 # 主定理
@@ -10,6 +11,7 @@ import Proofs.Exactness
 * `simulation_*`：シミュレーション（`Sim.make G x`）が**実際に動かしている**マルコフ連鎖
   `inducedKernel G x (Sim.make G x).D`（一様乱数 `i ∈ Fin n`、`u = k / D` に対する `step` の遷移確率）
   について、同じ性質。`simulation_exact` により仕様の核と厳密に一致するので、そこから従う。
+* `*_converges` / `*_geometric`：任意の初期分布から Boltzmann 分布への（幾何）収束（`Proofs.Convergence`）。
 * `square_*`：`L × L` 正方格子（周期境界、`L ≥ 2`）への適用。
 * `rejection_exact`：乱数の棄却法が偏らないこと。
 -/
@@ -39,6 +41,8 @@ theorem metropolis_irreducible (G : Graph) (x : Rat) (hx : 0 < x) :
 theorem metropolis_ergodic (G : Graph) (x : Rat) (hx0 : 0 < x) (hx1 : x < 1)
     (hG : ∃ b ∈ G.bonds, b.1 ≠ b.2) : Chain.Ergodic (kernel G x) :=
   ergodic G x hx0 hx1 hG
+
+-- `metropolis_geometric` と `metropolis_converges` は `Proofs.Convergence` にある。
 
 /-! ## シミュレーションが動かしている連鎖 -/
 
@@ -111,6 +115,18 @@ theorem simulation_ergodic (G : Graph) (x : Rat) (hx0 : 0 < x) (hx1 : x < 1)
     Chain.Ergodic (inducedKernel G x (Sim.make G x).D) := by
   rw [simulation_exact G x hx0 (Rat.le_of_lt hx1)]; exact ergodic G x hx0 hx1 hG
 
+/-- **幾何収束（実装）**。 -/
+theorem simulation_geometric (G : Graph) (x : Rat) (hx0 : 0 < x) (hx1 : x < 1)
+    (hG : ∃ b ∈ G.bonds, b.1 ≠ b.2) :
+    Chain.GeometricConvergence (boltzmann G x) (inducedKernel G x (Sim.make G x).D) := by
+  rw [simulation_exact G x hx0 (Rat.le_of_lt hx1)]; exact metropolis_geometric G x hx0 hx1 hG
+
+/-- **収束（実装）**：シミュレーションが動かしている連鎖は、任意の初期分布から Boltzmann 分布へ収束する。 -/
+theorem simulation_converges (G : Graph) (x : Rat) (hx0 : 0 < x) (hx1 : x < 1)
+    (hG : ∃ b ∈ G.bonds, b.1 ≠ b.2) :
+    Chain.Converges (boltzmann G x) (inducedKernel G x (Sim.make G x).D) := by
+  rw [simulation_exact G x hx0 (Rat.le_of_lt hx1)]; exact metropolis_converges G x hx0 hx1 hG
+
 /-! ## 正方格子 -/
 
 /-- `L ≥ 2` の正方格子には自己ループでないボンドがある（サイト 0 とその右隣）。 -/
@@ -135,6 +151,16 @@ theorem square_simulation (L : Nat) (hL : 2 ≤ L) (x : Rat) (hx0 : 0 < x) (hx1 
       Chain.Ergodic (inducedKernel (Lattice.square L) x (Sim.make (Lattice.square L) x).D) :=
   ⟨simulation_detailed_balance _ x hx0 (Rat.le_of_lt hx1),
     simulation_ergodic _ x hx0 hx1 (square_has_bond hL)⟩
+
+/-- **正方格子でのシミュレーションの収束**：`L ≥ 2`、`0 < x < 1` なら、実装が動かす連鎖は
+任意の初期分布から Boltzmann 分布へ幾何的に収束する。 -/
+theorem square_simulation_converges (L : Nat) (hL : 2 ≤ L) (x : Rat) (hx0 : 0 < x) (hx1 : x < 1) :
+    Chain.GeometricConvergence (boltzmann (Lattice.square L) x)
+        (inducedKernel (Lattice.square L) x (Sim.make (Lattice.square L) x).D) ∧
+      Chain.Converges (boltzmann (Lattice.square L) x)
+        (inducedKernel (Lattice.square L) x (Sim.make (Lattice.square L) x).D) :=
+  ⟨simulation_geometric _ x hx0 hx1 (square_has_bond hL),
+    simulation_converges _ x hx0 hx1 (square_has_bond hL)⟩
 
 /-! ## 乱数の棄却法 -/
 
