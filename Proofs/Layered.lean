@@ -28,6 +28,29 @@ theorem pow_ratio {x : Rat} (hx : 0 < x) {U U' a d : Nat} (h : U' + d = U + a) :
   have e : x ^ U' * x ^ d = x ^ U * x ^ a := by rw [← pow_add', ← pow_add', h]
   grind
 
+theorem inv_pow_mul_pow {x : Rat} (hx : x ≠ 0) : ∀ k : Nat, x⁻¹ ^ k * x ^ k = 1
+  | 0 => by simp only [Rat.pow_zero]; grind
+  | k + 1 => by
+    have ih := inv_pow_mul_pow hx k
+    have h1 : x⁻¹ * x = 1 := by rw [Rat.mul_comm]; exact Rat.mul_inv_cancel x hx
+    rw [Rat.pow_succ, Rat.pow_succ]
+    grind
+
+theorem ratioPow_eq {x : Rat} (hx : 0 < x) (a d : Nat) : ratioPow x a d = x ^ a / x ^ d := by
+  have hne : x ≠ 0 := Rat.ne_of_gt hx
+  have hd : x ^ d ≠ 0 := Rat.ne_of_gt (Rat.pow_pos hx)
+  unfold ratioPow
+  split
+  · rename_i h
+    have e : x ^ a = x ^ (a - d) * x ^ d := by rw [← pow_add', Nat.sub_add_cancel h]
+    rw [e, Rat.mul_div_cancel hd]
+  · rename_i h
+    have e : x ^ d = x ^ a * x ^ (d - a) := by rw [← pow_add', Nat.add_sub_cancel' (by omega)]
+    have hi := inv_pow_mul_pow hne (d - a)
+    have ha : x ^ a ≠ 0 := Rat.ne_of_gt (Rat.pow_pos hx)
+    rw [e]
+    grind
+
 /-- 局所比は重みの比に等しい。 -/
 theorem localRatio_eq (σ : Config n) (i : Fin n) :
     ∀ ls : List (List (Fin n × Fin n) × Rat), (∀ l ∈ ls, 0 < l.2) →
@@ -39,7 +62,7 @@ theorem localRatio_eq (σ : Config n) (i : Fin n) :
     have hrest : ∀ l' ∈ rest, 0 < l'.2 := fun l' hl' => h l' (List.mem_cons_of_mem l hl')
     have ih := localRatio_eq σ i rest hrest
     simp only [List.map_cons, localRatio, layerWeight]
-    rw [ih]
+    rw [ih, ratioPow_eq hx]
     have hflip : unsatOf l.1 (flip σ i) + Engine.disagree (nbrsOf l.1 i) σ i =
         unsatOf l.1 σ + Engine.agree (nbrsOf l.1 i) σ i := unsat_flip ⟨n, l.1⟩ σ i
     rw [← pow_ratio hx hflip]
@@ -84,7 +107,7 @@ theorem layered_exact (M : Model) (hpos : ∀ l ∈ M.layers, 0 < l.2) :
 theorem Layered.Sim.stepPure_fst' (s : Layered.Sim) (σ : Config s.M.n) (i : Fin s.M.n) (k : Nat) :
     (s.stepPure σ i k).1 =
       step s.tables[i] σ i ((k : Rat) / (acceptLocal s.tables[i] σ i).den) := by
-  unfold Layered.Sim.stepPure stepWithFlag step
+  unfold Layered.Sim.stepPure stepWithA step
   simp only [Rat.mkRat_eq_div, Rat.intCast_natCast]
   split <;> rfl
 

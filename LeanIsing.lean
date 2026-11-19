@@ -4,6 +4,8 @@ import LeanIsing.Lattice
 import LeanIsing.Engine
 import LeanIsing.Layered
 import LeanIsing.Quantum
+import LeanIsing.QuantumExact
 import LeanIsing.Numeric
 import LeanIsing.Exact
 import LeanIsing.App
+import LeanIsing.QuantumApp

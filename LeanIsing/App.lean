@@ -44,6 +44,7 @@ def usage : String :=
   --hot              ランダムな配位から始める（既定は全上向き）
   --show             最終配位を表示する
   --exact            全配位の和による厳密解と比較する（L ≤ 4）
+  --quantum          横磁場 Ising 模型の量子モンテカルロ法（lake exe ising --quantum --help）
   -h, --help         この説明
 "
 

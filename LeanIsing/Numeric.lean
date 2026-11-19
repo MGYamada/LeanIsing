@@ -70,6 +70,14 @@ def xOfT (T : Rat) (qmax : Nat := 100) : Rat :=
 /-- `x = exp(-2/T)` に対応する温度 `T = -2 / ln x`。 -/
 def tOfX (x : Rat) : Rat := -2 / lnApprox x
 
+/-- `tanh a`（`0 ≤ a`）。 -/
+def tanhApprox (a : Rat) : Rat :=
+  let e := expApprox (2 * a)
+  (e - 1) / (e + 1)
+
+/-- `artanh y = (1/2) ln((1 + y)/(1 - y))`（`0 ≤ y < 1`）。 -/
+def artanhApprox (y : Rat) : Rat := -(lnApprox ((1 - y) / (1 + y))) / 2
+
 /-- 非負の有理数の平方根（`2^-64` 単位）。 -/
 def sqrtApprox (q : Rat) : Rat :=
   ((Nat.sqrt (q * 2 ^ 128).floor.toNat : Nat) : Rat) / 2 ^ 64

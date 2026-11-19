@@ -24,10 +24,15 @@ namespace Layered
 
 open Engine Rng
 
+/-- `x^a / x^d` を、約分の要らない `x^(a-d)` または `(x⁻¹)^(d-a)` として計算する
+（`x ≠ 0` なら等しい：`Proofs.Layered.ratioPow_eq`）。 -/
+def ratioPow (x : Rat) (a d : Nat) : Rat :=
+  if d ≤ a then x ^ (a - d) else x⁻¹ ^ (d - a)
+
 /-- 局所比 `Π_l x_l ^ agree_l / x_l ^ disagree_l`（サイト `i` を反転したときの重みの比）。 -/
 def localRatio {n : Nat} (σ : Config n) (i : Fin n) : List (List (Fin n) × Rat) → Rat
   | [] => 1
-  | l :: rest => l.2 ^ agree l.1 σ i / l.2 ^ disagree l.1 σ i * localRatio σ i rest
+  | l :: rest => ratioPow l.2 (agree l.1 σ i) (disagree l.1 σ i) * localRatio σ i rest
 
 /-- 近傍だけから計算した受理確率 `min(1, r)`。 -/
 def acceptLocal {n : Nat} (nbl : List (List (Fin n) × Rat)) (σ : Config n) (i : Fin n) : Rat :=
@@ -37,10 +42,10 @@ def acceptLocal {n : Nat} (nbl : List (List (Fin n) × Rat)) (σ : Config n) (i 
 def step {n : Nat} (nbl : List (List (Fin n) × Rat)) (σ : Config n) (i : Fin n) (u : Rat) : Config n :=
   if u < acceptLocal nbl σ i then flip σ i else σ
 
-/-- `step` と同じ計算で、受理したかどうかも返す。 -/
-def stepWithFlag {n : Nat} (nbl : List (List (Fin n) × Rat)) (σ : Config n) (i : Fin n) (u : Rat) :
-    Config n × Bool :=
-  if u < acceptLocal nbl σ i then (flip σ i, true) else (σ, false)
+/-- 受理確率 `A` を計算済みのときの 1 ステップ：`u = k / A.den` を作り、`u < A` なら反転する。
+受理したかどうかも返す。 -/
+@[inline] def stepWithA {n : Nat} (A : Rat) (σ : Config n) (i : Fin n) (k : Nat) : Config n × Bool :=
+  if mkRat k A.den < A then (flip σ i, true) else (σ, false)
 
 /-- サイト `i` の、層ごとの隣と因子。 -/
 def nbrLayers (M : Model) (i : Fin M.n) : List (List (Fin M.n) × Rat) :=
@@ -69,16 +74,19 @@ namespace Sim
 
 variable (s : Sim)
 
-/-- 乱数 `i` と `k` を与えたときの 1 ステップ。`u = k / D`（`D` は受理確率の分母）を厳密有理数として作る。 -/
+/-- 乱数 `i` と `k` を与えたときの 1 ステップ。`u = k / D`（`D` は受理確率の分母）を厳密有理数として作る。
+第 1 成分が `step` に等しいことは `Proofs.Layered.Layered.Sim.stepPure_fst`。 -/
 def stepPure (σ : Config s.M.n) (i : Fin s.M.n) (k : Nat) : Config s.M.n × Bool :=
-  stepWithFlag s.tables[i] σ i (mkRat k (acceptLocal s.tables[i] σ i).den)
+  stepWithA (acceptLocal s.tables[i] σ i) σ i k
 
-/-- 1 ステップ：サイト `i` を一様に引き、受理確率の分母 `D` について `k ∈ [0, D)` を一様に引く。 -/
+/-- 1 ステップ：サイト `i` を一様に引き、受理確率 `A` の分母 `D` について `k ∈ [0, D)` を一様に引く。
+返り値は `s.stepPure σ i k` と定義上等しい（`A` を 1 回だけ計算する）。 -/
 def stepM (h : 0 < s.M.n) (σ : Config s.M.n) : RandM (Config s.M.n × Bool) := do
   let i0 ← s.siteU.sample
   let i : Fin s.M.n := ⟨i0 % s.M.n, Nat.mod_lt _ h⟩
-  let k ← uniformNat (acceptLocal s.tables[i] σ i).den
-  return s.stepPure σ i k
+  let A := acceptLocal s.tables[i] σ i
+  let k ← uniformNat A.den
+  return stepWithA A σ i k
 
 /-- 1 スイープ（`n` ステップ）。受理数も返す。 -/
 def sweep (h : 0 < s.M.n) (σ : Config s.M.n) : RandM (Config s.M.n × Nat) := do
