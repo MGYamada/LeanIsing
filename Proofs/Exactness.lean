@@ -178,18 +178,16 @@ theorem natCast_sub' {a b : Nat} (h : b ≤ a) : ((a - b : Nat) : Rat) = a - b :
   have : ((a - b : Nat) : Rat) + b = a := by rw [← Rat.natCast_add, Nat.sub_add_cancel h]
   grind
 
-/-- サイト `i` を選んだとき、`D` 通りの `u = k / D` のうち `σ` を `τ` に移すものの数は `D · term`。 -/
-theorem count_site (hx0 : 0 < x) (hx1 : x ≤ 1) {D : Nat} (hDpos : 0 < D)
-    (σ τ : Config G.n) (i : Fin G.n) (hD : x.den ^ (G.nbrs i).length ∣ D) :
+/-- **しきい値判定の計数**：`A · D = c`（`c ≤ D` は自然数）なら、`k ∈ {0, …, D - 1}` のうち
+「`k / D < A` なら `flip σ i`、さもなくば `σ`」が `τ` になるものの数は `D · ([flip σ i = τ] A + [σ = τ] (1 - A))`。
+受理確率の計算方法によらない（古典模型と層つき模型の両方で使う）。 -/
+theorem count_threshold {n : Nat} {D c : Nat} (hDpos : 0 < D) {A : Rat} (hc : A * D = c)
+    (hcD : c ≤ D) (σ τ : Config n) (i : Fin n) :
     (((List.range D).countP fun k : Nat =>
-        decide (step x (G.nbrs i) σ i ((k : Rat) / D) = τ) : Nat) : Rat) =
-      D * term (weight G x) σ τ i := by
-  obtain ⟨c, hc, hcD⟩ := acceptLocal_mul_nat hx0 hx1 σ i hD
+        decide ((if (k : Rat) / D < A then flip σ i else σ) = τ) : Nat) : Rat) =
+      D * ((if flip σ i = τ then A else 0) + (if σ = τ then 1 - A else 0)) := by
   have hcount := countP_div_lt hDpos hc
   rw [Nat.min_eq_left hcD] at hcount
-  unfold step term
-  rw [← acceptLocal_eq hx0 hx1 σ i]
-  generalize acceptLocal x (G.nbrs i) σ i = A at hc hcount ⊢
   by_cases hf : flip σ i = τ
   · -- 受理されたときだけ `τ` に移る
     have hne : σ ≠ τ := fun h => flip_ne σ i (hf.trans h.symm)
@@ -222,6 +220,17 @@ theorem count_site (hx0 : 0 < x) (hx1 : x ≤ 1) {D : Nat} (hDpos : 0 < D)
         · simp [hk, hst])]
       simp only [hf, hst, ↓reduceIte]
       grind
+
+/-- サイト `i` を選んだとき、`D` 通りの `u = k / D` のうち `σ` を `τ` に移すものの数は `D · term`。 -/
+theorem count_site (hx0 : 0 < x) (hx1 : x ≤ 1) {D : Nat} (hDpos : 0 < D)
+    (σ τ : Config G.n) (i : Fin G.n) (hD : x.den ^ (G.nbrs i).length ∣ D) :
+    (((List.range D).countP fun k : Nat =>
+        decide (step x (G.nbrs i) σ i ((k : Rat) / D) = τ) : Nat) : Rat) =
+      D * term (weight G x) σ τ i := by
+  obtain ⟨c, hc, hcD⟩ := acceptLocal_mul_nat hx0 hx1 σ i hD
+  unfold step term
+  rw [← acceptLocal_eq hx0 hx1 σ i]
+  exact count_threshold hDpos hc hcD σ τ i
 
 /-! ## 4. 遷移確率の一致 -/
 
