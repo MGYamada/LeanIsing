@@ -61,7 +61,30 @@ def magnetization (σ : Config G.n) : Int :=
 
 end Graph
 
-/-! ## Boltzmann 分布 -/
+/-! ## 一般の重みに対する Metropolis 法
+
+正の重み `w : Config n → Rat` に対して、規格化した分布 `w / Σ w` と、単一スピン反転の
+Metropolis 核を定義する。古典 Ising 模型の重み `x ^ unsat σ` も、横磁場 Ising 模型の
+経路積分（世界線）表示の重みも、この形で扱う。 -/
+
+/-- 規格化した分布 `π(σ) = w(σ) / Σ_σ w(σ)`。 -/
+def normalize {n : Nat} (w : Config n → Rat) (σ : Config n) : Rat :=
+  w σ / ((allConfigs n).map w).sum
+
+/-- Metropolis の受理確率 `min(1, w(σ') / w(σ))`（`σ'` はサイト `i` を反転した配位）。 -/
+def acceptW {n : Nat} (w : Config n → Rat) (σ : Config n) (i : Fin n) : Rat :=
+  min 1 (w (flip σ i) / w σ)
+
+/-- 重み `w` に対する Metropolis 法の 1 ステップの遷移確率 `P(σ → τ)`。
+
+サイト `i` を確率 `1/n` で一様に選び、確率 `acceptW w σ i` で反転を受理して `flip σ i` へ移り、
+確率 `1 - acceptW w σ i` で棄却して `σ` にとどまる。 -/
+def metropolis {n : Nat} (w : Config n → Rat) (σ τ : Config n) : Rat :=
+  ((List.finRange n).map fun i =>
+      (if flip σ i = τ then acceptW w σ i else 0) +
+      (if σ = τ then 1 - acceptW w σ i else 0)).sum / n
+
+/-! ## 古典 Ising 模型の Boltzmann 分布と Metropolis 法 -/
 
 /-- 規格化前の Boltzmann 重み `x ^ unsat σ`（`exp(-βE)` に比例）。 -/
 def weight (G : Graph) (x : Rat) (σ : Config G.n) : Rat :=
@@ -72,28 +95,21 @@ def partition (G : Graph) (x : Rat) : Rat :=
   ((allConfigs G.n).map (weight G x)).sum
 
 /-- Boltzmann 分布 `π(σ) = x ^ unsat σ / Z`。 -/
-def boltzmann (G : Graph) (x : Rat) (σ : Config G.n) : Rat :=
-  weight G x σ / partition G x
+def boltzmann (G : Graph) (x : Rat) : Config G.n → Rat :=
+  normalize (weight G x)
 
-/-! ## Metropolis 法 -/
+/-- Metropolis の受理確率 `min(1, π(σ') / π(σ))`。 -/
+def accept (G : Graph) (x : Rat) : Config G.n → Fin G.n → Rat :=
+  acceptW (weight G x)
 
-/-- Metropolis の受理確率 `min(1, π(σ') / π(σ))`（`σ'` はサイト `i` を反転した配位）。 -/
-def accept (G : Graph) (x : Rat) (σ : Config G.n) (i : Fin G.n) : Rat :=
-  min 1 (weight G x (flip σ i) / weight G x σ)
-
-/-- Metropolis 法の 1 ステップの遷移確率 `P(σ → τ)`。
-
-サイト `i` を確率 `1/n` で一様に選び、確率 `accept σ i` で反転を受理して `flip σ i` へ移り、
-確率 `1 - accept σ i` で棄却して `σ` にとどまる。 -/
-def kernel (G : Graph) (x : Rat) (σ τ : Config G.n) : Rat :=
-  ((List.finRange G.n).map fun i =>
-      (if flip σ i = τ then accept G x σ i else 0) +
-      (if σ = τ then 1 - accept G x σ i else 0)).sum / G.n
+/-- 古典 Ising 模型の Metropolis 法の遷移確率。 -/
+def kernel (G : Graph) (x : Rat) : Config G.n → Config G.n → Rat :=
+  metropolis (weight G x)
 
 /-! ## マルコフ連鎖の性質
 
 一般の遷移行列 `P : Config n → Config n → Rat` について定義する。
-仕様の Metropolis 核 `kernel G x` にも、実装が実際に動かしている連鎖の遷移確率
+仕様の Metropolis 核 `metropolis w`（`kernel G x` など）にも、実装が実際に動かしている連鎖の遷移確率
 （`Engine.inducedKernel`）にも同じ定義を当てはめる。 -/
 
 namespace Chain

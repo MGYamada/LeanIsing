@@ -77,9 +77,9 @@ theorem unsat_flip (G : Graph) (σ : Config G.n) (i : Fin G.n) :
 variable {G : Graph} {x : Rat}
 
 theorem acceptLocal_eq (hx0 : 0 < x) (hx1 : x ≤ 1) (σ : Config G.n) (i : Fin G.n) :
-    acceptLocal x (G.nbrs i) σ i = accept G x σ i := by
+    acceptLocal x (G.nbrs i) σ i = acceptW (weight G x) σ i := by
   have key := unsat_flip G σ i
-  unfold acceptLocal accept weight
+  unfold acceptLocal acceptW weight
   generalize agree (G.nbrs i) σ i = a at key ⊢
   generalize disagree (G.nbrs i) σ i = d at key ⊢
   generalize G.unsat (flip σ i) = U' at key ⊢
@@ -183,7 +183,7 @@ theorem count_site (hx0 : 0 < x) (hx1 : x ≤ 1) {D : Nat} (hDpos : 0 < D)
     (σ τ : Config G.n) (i : Fin G.n) (hD : x.den ^ (G.nbrs i).length ∣ D) :
     (((List.range D).countP fun k : Nat =>
         decide (step x (G.nbrs i) σ i ((k : Rat) / D) = τ) : Nat) : Rat) =
-      D * term G x σ τ i := by
+      D * term (weight G x) σ τ i := by
   obtain ⟨c, hc, hcD⟩ := acceptLocal_mul_nat hx0 hx1 σ i hD
   have hcount := countP_div_lt hDpos hc
   rw [Nat.min_eq_left hcD] at hcount
@@ -234,7 +234,7 @@ theorem inducedKernel_eq (hx0 : 0 < x) (hx1 : x ≤ 1) {D : Nat} (hDpos : 0 < D)
   rw [kernel_eq, natCast_sum, sum_map_congr (fun i _ => count_site hx0 hx1 hDpos σ τ i (hD i)),
     sum_map_mul_left]
   have hD0 : (D : Rat) ≠ 0 := Rat.ne_of_gt (Rat.natCast_pos.2 hDpos)
-  generalize ((List.finRange G.n).map (term G x σ τ)).sum = S
+  generalize ((List.finRange G.n).map (term (weight G x) σ τ)).sum = S
   grind
 
 end LeanIsing.Proofs
