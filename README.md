@@ -1,9 +1,10 @@
 # LeanIsing
 
-Lean 4 だけで書いた 2 次元 Ising 模型の Metropolis 法シミュレーションです。
+Lean 4 だけで書いた Ising 模型の Metropolis 法シミュレーションと、横磁場 Ising 模型の経路積分量子モンテカルロ法です。
 乱数も確率もすべて**厳密な有理数**（Lean core の `Rat`）で扱い、浮動小数点数は一切使いません。
 そのうえで、**シミュレーションが実際に動かしているマルコフ連鎖**が詳細釣り合いとエルゴード性を満たし、
-任意の初期分布から Boltzmann 分布へ（幾何的に）収束することを、Lean のカーネルで証明しています。
+任意の初期分布から目標の分布（古典模型では Boltzmann 分布、量子模型では経路積分の重みによる世界線の分布）へ
+幾何的に収束することを、Lean のカーネルで証明しています。
 
 - シミュレーション本体、乱数生成器、証明、ビルド設定（`lakefile.lean`）まで、すべて Lean で書いています。
 - 外部ライブラリには依存しません（Lean core だけを使います。Mathlib も使いません）。
@@ -14,12 +15,15 @@ Lean 4 だけで書いた 2 次元 Ising 模型の Metropolis 法シミュレー
 必要なのは [elan](https://github.com/leanprover/elan) だけです（`lean-toolchain` に従って Lean 4.35.0 が入ります）。
 
 ```sh
-lake build                          # シミュレーション・証明・監査・テストをまとめてビルド（約 15 秒）
+lake build                          # シミュレーション・証明・監査・テストをまとめてビルド
 lake exe ising                      # 24×24 格子で温度スキャン（約 13 秒）
 lake exe ising -L 32 -T 2.269 --show            # 臨界温度付近、最終配位も表示
 lake exe ising -x 70/169,2/5        # 温度を x = exp(-2/T) の有理数で直接指定
 lake exe ising -L 4 --exact --sweeps 20000      # 全 65536 配位の和による厳密解と比較
 lake exe ising --help
+lake exe ising --quantum            # 横磁場 Ising 模型（16 サイトの環、M = 16、β = 4）で Γ をスキャン
+lake exe ising --quantum -N 4 -M 8 --beta 2 --exact --sweeps 20000   # 同じ M での厳密値と比較
+lake exe ising --quantum --help
 ```
 
 実行例（`lake exe ising`、seed = 1）：
@@ -73,9 +77,59 @@ exp(-βE(σ)) = exp(βJ·|bonds|) · x ^ (不満足ボンドの数)
 整数 `k` は SplitMix64 の 64 ビット語から**棄却法**で作るので、`[0, D)` の上で偏りがありません
 （採用した語の中で各剰余がちょうど同じ回数現れることを `rejection_exact` として証明しています）。
 
+## 横磁場 Ising 模型の量子モンテカルロ法
+
+`H = -J Σ_⟨ij⟩ σᶻ_i σᶻ_j - Γ Σ_i σˣ_i` を Trotter 数 `M`、`ε = β/M` で分解すると
+`Z_M = Tr (e^{εJΣσᶻσᶻ} e^{εΓΣσˣ})^M` になります。`e^{aσˣ} = cosh a · (1 + tanh a · σˣ)` なので、
+`σᶻ` 基底での転送行列の要素は、定数倍を除いて
+
+```
+T(s, s') = x^{unsat(s)} · y^{#{i : s_i ≠ s'_i}}、   x = e^{-2εJ}、 y = tanh(εΓ)
+```
+
+です。`x` と `y` を有理数にとれば、世界線 `(s_0, …, s_{M-1})` の重み `Π_τ T(s_τ, s_{τ+1})` も厳密な有理数になります。
+これは空間 × 虚時間の格子上で、空間方向のボンドの因子が `x`、虚時間方向のボンドの因子が `y` の
+2 層の Ising 模型の重みと同じなので（`trotter_weight`）、その Metropolis 法が経路積分量子モンテカルロ法になります。
+`M = 1` では虚時間方向のボンドが自己ループになり、古典模型に戻ります（`pathWeight_one`）。
+
+実行例（`lake exe ising --quantum -N 4 -M 8 --beta 2 --gamma 0.5,1,2 --sweeps 20000 --therm 1000 --exact`）：
+
+```
+     Γ y               Γ_y         ⟨σᶻσᶻ⟩          ⟨σˣ⟩       ⟨|m_z|⟩        e    受理率    ⟨σᶻσᶻ⟩ 厳密    ⟨σˣ⟩ 厳密
+-----------------------------------------------------------------------------------------------------------------
+ 0.500 24/193       0.5000     0.9334(57)    0.2821(71)    0.9622(40)  -1.0744  0.028       0.9364     0.2780
+ 1.000 12/49        0.9999     0.7375(58)    0.5882(65)    0.8215(55)  -1.3256  0.135       0.7373     0.5873
+ 2.000 61/132       2.0000     0.3771(32)    0.9348(21)    0.4102(42)  -2.2467  0.451       0.3782     0.9332
+```
+
+「厳密」の列は、`2^N × 2^N` の転送行列を `M` 回掛けて求めた、**同じ `M` での**厳密な期待値です（`LeanIsing/QuantumExact.lean`）。
+モンテカルロ法の結果は誤差の範囲で一致します。
+
+注意：定常分布は **Trotter 分解した**経路積分の測度そのもので、量子系の熱平衡状態との差（Trotter 誤差）は `O((β/M)²)` 残ります。
+たとえば上の `Γ = 1` の厳密エネルギーは `M = 4, 8, 16, 32` で −1.456、−1.325、−1.286、−1.276 と `M → ∞` へ収束していきます。
+更新は単一スピン反転だけなので、`M` が大きい（`y` が小さい）ほど受理率が下がり、相関時間が長くなります。
+
+### 古典模型から量子模型へ、証明を保ったまま移行した手順
+
+各段階で `lake build`（証明・監査・テスト）がすべて通る状態を保ち、定常分布の存在を一度も失わずに移行しました。
+
+1. **一般の重み**：Metropolis 核を任意の正の重み `w` について定義し直し（`metropolis w`、`normalize w`）、
+   詳細釣り合い・定常性・既約性・エルゴード性・収束を一般の `w` で証明する。古典模型の `kernel G x` は
+   `metropolis (weight G x)` と定義上等しく、既存の定理の主張は変わらない。
+   エルゴード性の仮定は「重みが減る反転が 1 つある」だけになる。
+2. **層つき模型**：ボンドの層ごとに因子 `x_l` をもつ模型 `Model` を入れる。古典模型は 1 層の場合
+   （`toModel_kernel`）。
+3. **層つき模型の実行系**：局所比 `Π_l x_l^{agree_l} / x_l^{disagree_l}` から受理確率 `A` を計算する。
+   層が複数あると分母に因子の分子も現れるので、一様乱数の分母を `A` 自身の分母 `D = A.den` に合わせ、
+   `u = k/D` との厳密比較で `P(u < A) = A` を丸めなしに保つ（`layered_exact`）。
+4. **横磁場 Ising 模型**：Trotter 格子を 2 層の模型として作り、重みが転送行列の要素の積であることと
+   （`trotter_weight`、`transfer_eq_tensor`）、QMC 連鎖の性質（`qmc_simulation`）を示す。
+5. **実行ファイル**：`--quantum` モードと、転送行列による同じ `M` での厳密値との比較。
+
 ## 何が証明されているか
 
-主定理は [`Proofs/Theorems.lean`](Proofs/Theorems.lean) と [`Proofs/Convergence.lean`](Proofs/Convergence.lean) にあります。
+主定理は [`Proofs/Theorems.lean`](Proofs/Theorems.lean)、[`Proofs/Convergence.lean`](Proofs/Convergence.lean)、
+[`Proofs/Quantum.lean`](Proofs/Quantum.lean) にあります。
 正方格子でのいちばん強い形は次の 2 つです。
 
 ```lean
@@ -110,6 +164,16 @@ theorem square_simulation_converges (L : Nat) (hL : 2 ≤ L) (x : Rat) (hx0 : 0 
 | `simulation_exact` | 実装の遷移確率 `inducedKernel` = 仕様の核 `kernel` | 任意のグラフ、`0 < x ≤ 1` |
 | `simulation_*` | 上の性質を実装の連鎖について | 同上 |
 | `rejection_exact` | 乱数の棄却法は各値をちょうど同じ回数出す | |
+| `general_*` | 任意の正の重み `w` の Metropolis 核について、上の性質（エルゴード性・収束は「重みが減る反転がある」とき） | `w > 0` |
+| `layered_exact` | 層つき模型の実装の遷移確率 = 仕様の核 | 因子がすべて正 |
+| `trotter_weight` | 2 層の Trotter 模型の重み = 世界線の重み `Π_τ T(s_τ, s_{τ+1})` | |
+| `transfer_eq_tensor` | 横磁場の因子は `1 + yσˣ` のテンソル積 | |
+| `pathWeight_one` | `M = 1` では古典模型の重み | |
+| `qmc_exact` | QMC の実装の遷移確率 = 世界線の重みに対する Metropolis 核 | `0 < x`、`0 < y` |
+| `qmc_simulation` | QMC 連鎖は世界線の分布について詳細釣り合い・定常・エルゴード的・幾何収束・収束 | `0 < x < 1`、`0 < y ≤ 1`、`M ≥ 1` |
+
+経路積分の恒等式 `Σ_世界線 Π_τ T(s_τ, s_{τ+1}) = Tr T^M`（世界線の分布の規格化定数が Trotter 分解した分配関数であること）は、
+小さな系での数値検査（`Tests/QuantumTests.lean`）にとどめ、一般には証明していません。
 
 エルゴード性は、有限状態マルコフ連鎖としての正則性（既約かつ非周期的）として述べています。
 定常分布への収束は Perron–Frobenius の定理を使わずに、Doeblin の議論で直接証明しています（下の「証明のしくみ」）。
@@ -128,10 +192,16 @@ theorem square_simulation_converges (L : Nat) (hL : 2 ≤ L) (x : Rat) (hx0 : 0 
 - `kernel G x σ τ`：サイト `i` を確率 `1/n` で選び、確率 `accept` で反転、さもなくばとどまる、の遷移確率。
 - `Chain.Stochastic` / `DetailedBalance` / `Stationary` / `Irreducible` / `Ergodic`：一般の遷移行列についての性質。
   `Chain.pow P m` は遷移行列の `m` 乗。
+- `normalize w`、`acceptW w`、`metropolis w`：一般の正の重み `w` に対する分布と Metropolis 核。
+  古典模型の `boltzmann G x`、`accept G x`、`kernel G x` は `w = weight G x` の場合。
+- `Model`（ボンドの層と因子の組）、`Model.weight = Π_l x_l ^ unsat_l`、`Model.kernel`、`Model.boltzmann`。
+- [`LeanIsing/Quantum.lean`](LeanIsing/Quantum.lean)：`transfer`（Trotter 転送行列）、`pathWeight`（世界線の重み）、
+  `trotter G M x y`（2 層の模型）、`pathDistribution`（世界線の分布）。
 - `Chain.IsDistribution`（非負で総和 1）、`Chain.evolve P μ t`（`t` ステップ後の分布 `μP^t`）、
   `Chain.l1Dist`（L¹ 距離）、`Chain.Converges` / `GeometricConvergence`：収束の主張。
 
-加えて、`inducedKernel`（[`LeanIsing/Engine.lean`](LeanIsing/Engine.lean)）が「シミュレーションの 1 ステップの遷移確率」であることを信頼します。
+加えて、`inducedKernel`（[`LeanIsing/Engine.lean`](LeanIsing/Engine.lean)）と `Layered.inducedKernel`
+（[`LeanIsing/Layered.lean`](LeanIsing/Layered.lean)）が「シミュレーションの 1 ステップの遷移確率」であることを信頼します。
 シミュレーション `Sim.stepM` は、乱数 `i`、`k` を引いて `Sim.stepPure` を呼ぶだけで、その結果が
 `step x (G.nbrs i) σ i (k / D)` に等しいことは `Sim.stepPure_fst` として証明しています。
 証明の外に残る前提は、(1) 擬似乱数（SplitMix64）が一様な 64 ビット語の列とみなせること、
@@ -169,13 +239,13 @@ Engine（実装：近傍だけで受理確率を計算し、u = k/D と厳密比
 
 主定理は Lean の標準公理 `propext`・`Classical.choice`・`Quot.sound` だけに依存します
 （`Rat` の補題や `simp`・`grind`・`omega` がこれらを使うため。leankoban のような公理ゼロではありません）。
-[`Proofs/Audit.lean`](Proofs/Audit.lean) が `lake build` のたびに、14 個の主定理の**主張が期待どおりであること**と、
+[`Proofs/Audit.lean`](Proofs/Audit.lean) が `lake build` のたびに、22 個の主定理の**主張が期待どおりであること**と、
 主定理と補助定理が**標準公理以外（`sorryAx`、`native_decide` の `Lean.ofReduceBool` など）に依存しないこと**を検査し、
 違反があればビルドを失敗させます。
 
 ```sh
 lake build Proofs.Audit
-# info: 監査 OK: 14 個の主定理の主張は期待どおりで、これらと補助定理 12 個は
+# info: 監査 OK: 22 個の主定理の主張は期待どおりで、これらと補助定理 19 個は
 #       標準公理（propext, Classical.choice, Quot.sound）だけに依存する（sorry・native_decide なし）。
 ```
 
@@ -187,15 +257,23 @@ LeanIsing/Spec.lean            仕様（信頼の核）：模型・Boltzmann 分
 LeanIsing/Rng.lean             SplitMix64、棄却法による一様乱数、厳密有理数の乱数 u = k/D
 LeanIsing/Lattice.lean         正方格子（周期境界）と 1 次元の環
 LeanIsing/Engine.lean          実装：近傍の受理確率、step、スイープ、統計、inducedKernel
+LeanIsing/Layered.lean         層つき模型の実装（受理確率の分母に合わせた乱数格子）
+LeanIsing/Quantum.lean         横磁場 Ising 模型の経路積分表示（仕様）：転送行列・世界線の重み・Trotter 格子
+LeanIsing/QuantumExact.lean    小さな量子系の厳密値（転送行列の積）
+LeanIsing/QuantumApp.lean      実行ファイルの --quantum モード
 LeanIsing/Exact.lean           小さな系の厳密解（全配位の和、状態密度）
 LeanIsing/Numeric.lean         表示用の数値計算（有理数の級数による exp・ln、最良有理近似、Onsager 解）
 LeanIsing/App.lean, Main.lean  実行ファイル
 Proofs/Lemmas.lean             反転・全配位・和の補題
-Proofs/DetailedBalance.lean    詳細釣り合い・確率行列・定常性
-Proofs/Ergodicity.lean         既約性・エルゴード性
+Proofs/DetailedBalance.lean    詳細釣り合い・確率行列・定常性（一般の重み）
+Proofs/Ergodicity.lean         既約性・エルゴード性（一般の重み）
 Proofs/Exactness.lean          実装の遷移確率 = 仕様の核
 Proofs/Convergence.lean        定常分布への幾何収束（Doeblin の議論）
+Proofs/Model.lean              層つき模型の詳細釣り合い・エルゴード性・収束、古典模型 = 1 層
+Proofs/Layered.lean            層つき模型の実装の遷移確率 = 仕様の核
+Proofs/Quantum.lean            世界線の重み・テンソル積・M = 1・量子モンテカルロ法の主定理
 Proofs/Theorems.lean           主定理（実装・正方格子への適用、棄却法）
 Proofs/Audit.lean              主張と公理の監査
 Tests/EngineTests.lean         小さな系での数値検査（ビルド時に評価する #guard）
+Tests/QuantumTests.lean        量子モンテカルロ法の数値検査（経路積分の恒等式 Σ Π T = Tr T^M を含む）
 ```
