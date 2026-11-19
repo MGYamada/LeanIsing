@@ -106,6 +106,50 @@ def accept (G : Graph) (x : Rat) : Config G.n → Fin G.n → Rat :=
 def kernel (G : Graph) (x : Rat) : Config G.n → Config G.n → Rat :=
   metropolis (weight G x)
 
+/-! ## 異方的な Ising 模型（ボンドの層ごとの Boltzmann 因子）
+
+ボンドを種類（層）ごとに分け、層 `l` の不満足ボンド 1 本ごとに因子 `x_l = exp(-2βJ_l)` を掛ける。
+横磁場 Ising 模型の経路積分表示は、空間方向の層（`x = exp(-2βJ/M)`）と虚時間方向の層
+（`y = tanh(βΓ/M)`）の 2 層をもつ模型になる（`LeanIsing.Quantum`）。古典模型は 1 層の場合である。 -/
+
+/-- ボンドの集合 `bs` のうち、両端のスピンが逆向きのものの数。 -/
+def unsatOf {n : Nat} (bs : List (Fin n × Fin n)) (σ : Config n) : Nat :=
+  bs.countP fun b => σ[b.1] != σ[b.2]
+
+/-- 異方的な Ising 模型：同じサイトの上に、ボンドの層 `(bs_l, x_l)` を並べたもの。 -/
+structure Model where
+  n : Nat
+  layers : List (List (Fin n × Fin n) × Rat)
+
+/-- 層ごとの因子の積 `Π_l x_l ^ unsatOf bs_l σ`。 -/
+def layerWeight {n : Nat} (σ : Config n) : List (List (Fin n × Fin n) × Rat) → Rat
+  | [] => 1
+  | l :: rest => l.2 ^ unsatOf l.1 σ * layerWeight σ rest
+
+namespace Model
+
+variable (M : Model)
+
+/-- 規格化前の Boltzmann 重み `w(σ) = Π_l x_l ^ (層 l の不満足ボンド数)`。 -/
+def weight (σ : Config M.n) : Rat := layerWeight σ M.layers
+
+/-- Boltzmann 分布 `w / Σ w`。 -/
+def boltzmann : Config M.n → Rat := normalize M.weight
+
+/-- Metropolis 法の遷移確率。 -/
+def kernel : Config M.n → Config M.n → Rat := metropolis M.weight
+
+/-- すべての因子が `0 < x_l ≤ 1`（強磁性で温度が正）。 -/
+def Valid : Prop := ∀ l ∈ M.layers, 0 < l.2 ∧ l.2 ≤ 1
+
+/-- 因子が 1 未満の層に、自己ループでないボンドがある（どこかで反転が棄却されうる）。 -/
+def Frustratable : Prop := ∃ l ∈ M.layers, l.2 < 1 ∧ ∃ b ∈ l.1, b.1 ≠ b.2
+
+end Model
+
+/-- 古典模型を 1 層の模型として見る。 -/
+def Graph.toModel (G : Graph) (x : Rat) : Model := ⟨G.n, [(G.bonds, x)]⟩
+
 /-! ## マルコフ連鎖の性質
 
 一般の遷移行列 `P : Config n → Config n → Rat` について定義する。
