@@ -61,8 +61,13 @@ structure Uniform where
 /-- `m < 2^64` なら 64 ビット語 1 個（棄却確率 `< m / 2^64`）、それより大きければ
 `2^(64c) ≥ 2^32 · m` となる語数 `c`（棄却確率 `< 2^-32`）を使う。 -/
 def Uniform.make (m : Nat) : Uniform :=
-  let c := if m.log2 < 64 then 1 else (m.log2 + 32) / 64 + 1
-  { m, c, lo := 2 ^ (64 * c) % m }
+  if m.log2 < 64 then
+    -- `m < 2^64` なので `2^64 % m = (2^64 - m) % m` を `UInt64` で計算できる（多倍長演算を避ける）
+    let m64 := m.toUInt64
+    { m, c := 1, lo := ((0 - m64) % m64).toNat }
+  else
+    let c := (m.log2 + 32) / 64 + 1
+    { m, c, lo := 2 ^ (64 * c) % m }
 
 /-- 棄却法の本体（64 ビット語 1 個の場合。`UInt64` だけで計算する）。 -/
 partial def rejectLoop64 (m lo : UInt64) : RandM UInt64 := do

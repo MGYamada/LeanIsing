@@ -77,9 +77,9 @@ theorem unsat_flip (G : Graph) (σ : Config G.n) (i : Fin G.n) :
 variable {G : Graph} {x : Rat}
 
 theorem acceptLocal_eq (hx0 : 0 < x) (hx1 : x ≤ 1) (σ : Config G.n) (i : Fin G.n) :
-    acceptLocal x (G.nbrs i) σ i = accept G x σ i := by
+    acceptLocal x (G.nbrs i) σ i = acceptW (weight G x) σ i := by
   have key := unsat_flip G σ i
-  unfold acceptLocal accept weight
+  unfold acceptLocal acceptW weight
   generalize agree (G.nbrs i) σ i = a at key ⊢
   generalize disagree (G.nbrs i) σ i = d at key ⊢
   generalize G.unsat (flip σ i) = U' at key ⊢
@@ -178,18 +178,16 @@ theorem natCast_sub' {a b : Nat} (h : b ≤ a) : ((a - b : Nat) : Rat) = a - b :
   have : ((a - b : Nat) : Rat) + b = a := by rw [← Rat.natCast_add, Nat.sub_add_cancel h]
   grind
 
-/-- サイト `i` を選んだとき、`D` 通りの `u = k / D` のうち `σ` を `τ` に移すものの数は `D · term`。 -/
-theorem count_site (hx0 : 0 < x) (hx1 : x ≤ 1) {D : Nat} (hDpos : 0 < D)
-    (σ τ : Config G.n) (i : Fin G.n) (hD : x.den ^ (G.nbrs i).length ∣ D) :
+/-- **しきい値判定の計数**：`A · D = c`（`c ≤ D` は自然数）なら、`k ∈ {0, …, D - 1}` のうち
+「`k / D < A` なら `flip σ i`、さもなくば `σ`」が `τ` になるものの数は `D · ([flip σ i = τ] A + [σ = τ] (1 - A))`。
+受理確率の計算方法によらない（古典模型と層つき模型の両方で使う）。 -/
+theorem count_threshold {n : Nat} {D c : Nat} (hDpos : 0 < D) {A : Rat} (hc : A * D = c)
+    (hcD : c ≤ D) (σ τ : Config n) (i : Fin n) :
     (((List.range D).countP fun k : Nat =>
-        decide (step x (G.nbrs i) σ i ((k : Rat) / D) = τ) : Nat) : Rat) =
-      D * term G x σ τ i := by
-  obtain ⟨c, hc, hcD⟩ := acceptLocal_mul_nat hx0 hx1 σ i hD
+        decide ((if (k : Rat) / D < A then flip σ i else σ) = τ) : Nat) : Rat) =
+      D * ((if flip σ i = τ then A else 0) + (if σ = τ then 1 - A else 0)) := by
   have hcount := countP_div_lt hDpos hc
   rw [Nat.min_eq_left hcD] at hcount
-  unfold step term
-  rw [← acceptLocal_eq hx0 hx1 σ i]
-  generalize acceptLocal x (G.nbrs i) σ i = A at hc hcount ⊢
   by_cases hf : flip σ i = τ
   · -- 受理されたときだけ `τ` に移る
     have hne : σ ≠ τ := fun h => flip_ne σ i (hf.trans h.symm)
@@ -223,6 +221,17 @@ theorem count_site (hx0 : 0 < x) (hx1 : x ≤ 1) {D : Nat} (hDpos : 0 < D)
       simp only [hf, hst, ↓reduceIte]
       grind
 
+/-- サイト `i` を選んだとき、`D` 通りの `u = k / D` のうち `σ` を `τ` に移すものの数は `D · term`。 -/
+theorem count_site (hx0 : 0 < x) (hx1 : x ≤ 1) {D : Nat} (hDpos : 0 < D)
+    (σ τ : Config G.n) (i : Fin G.n) (hD : x.den ^ (G.nbrs i).length ∣ D) :
+    (((List.range D).countP fun k : Nat =>
+        decide (step x (G.nbrs i) σ i ((k : Rat) / D) = τ) : Nat) : Rat) =
+      D * term (weight G x) σ τ i := by
+  obtain ⟨c, hc, hcD⟩ := acceptLocal_mul_nat hx0 hx1 σ i hD
+  unfold step term
+  rw [← acceptLocal_eq hx0 hx1 σ i]
+  exact count_threshold hDpos hc hcD σ τ i
+
 /-! ## 4. 遷移確率の一致 -/
 
 /-- **実装の厳密性**：`0 < x ≤ 1` で、各サイトについて `x.den ^ (次数) ∣ D` なら、
@@ -234,7 +243,7 @@ theorem inducedKernel_eq (hx0 : 0 < x) (hx1 : x ≤ 1) {D : Nat} (hDpos : 0 < D)
   rw [kernel_eq, natCast_sum, sum_map_congr (fun i _ => count_site hx0 hx1 hDpos σ τ i (hD i)),
     sum_map_mul_left]
   have hD0 : (D : Rat) ≠ 0 := Rat.ne_of_gt (Rat.natCast_pos.2 hDpos)
-  generalize ((List.finRange G.n).map (term G x σ τ)).sum = S
+  generalize ((List.finRange G.n).map (term (weight G x) σ τ)).sum = S
   grind
 
 end LeanIsing.Proofs

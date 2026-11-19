@@ -1,4 +1,5 @@
 import Proofs.Theorems
+import Proofs.Quantum
 import Lean
 
 /-!
@@ -89,6 +90,44 @@ run_cmd do
           LeanIsing.Chain.Converges (LeanIsing.boltzmann (LeanIsing.Lattice.square L) x)
             (LeanIsing.Engine.inducedKernel (LeanIsing.Lattice.square L) x
               (LeanIsing.Engine.Sim.make (LeanIsing.Lattice.square L) x).D))),
+    -- 一般の重みの Metropolis 核
+    (``LeanIsing.Proofs.general_detailed_balance,
+      ← `(∀ {n : Nat} (w : LeanIsing.Config n → Rat), (∀ σ, 0 < w σ) →
+        LeanIsing.Chain.DetailedBalance (LeanIsing.normalize w) (LeanIsing.metropolis w))),
+    (``LeanIsing.Proofs.general_geometric,
+      ← `(∀ {n : Nat} (w : LeanIsing.Config n → Rat), (∀ σ, 0 < w σ) → 0 < n →
+        (∃ σ₀ i₀, w (LeanIsing.flip σ₀ i₀) < w σ₀) →
+        LeanIsing.Chain.GeometricConvergence (LeanIsing.normalize w) (LeanIsing.metropolis w))),
+    -- 層つき模型
+    (``LeanIsing.Proofs.toModel_kernel,
+      ← `(∀ (G : LeanIsing.Graph) (x : Rat), (G.toModel x).kernel = LeanIsing.kernel G x)),
+    (``LeanIsing.Proofs.layered_exact,
+      ← `(∀ (M : LeanIsing.Model), (∀ l ∈ M.layers, 0 < l.2) →
+        LeanIsing.Layered.inducedKernel M = M.kernel)),
+    -- 横磁場 Ising 模型の量子モンテカルロ法
+    (``LeanIsing.Proofs.trotter_weight,
+      ← `(∀ (G : LeanIsing.Graph) (M : Nat) (x y : Rat),
+        (LeanIsing.Quantum.trotter G M x y).weight = LeanIsing.Quantum.pathWeight G M x y)),
+    (``LeanIsing.Proofs.pathWeight_one,
+      ← `(∀ (G : LeanIsing.Graph) (x y : Rat) (s : LeanIsing.Config (G.n * 1)),
+        LeanIsing.Quantum.pathWeight G 1 x y s =
+          LeanIsing.weight G x (LeanIsing.Quantum.slice s ⟨0, Nat.zero_lt_one⟩))),
+    (``LeanIsing.Proofs.qmc_exact,
+      ← `(∀ (G : LeanIsing.Graph) (M : Nat) {x y : Rat}, 0 < x → 0 < y →
+        LeanIsing.Layered.inducedKernel (LeanIsing.Quantum.trotter G M x y) =
+          LeanIsing.metropolis (LeanIsing.Quantum.pathWeight G M x y))),
+    (``LeanIsing.Proofs.qmc_simulation,
+      ← `(∀ (G : LeanIsing.Graph) (M : Nat), 0 < M → ∀ (x y : Rat), 0 < x → x < 1 → 0 < y → y ≤ 1 →
+        (∃ b ∈ G.bonds, b.1 ≠ b.2) →
+        LeanIsing.Chain.DetailedBalance (LeanIsing.Quantum.pathDistribution G M x y)
+            (LeanIsing.Layered.inducedKernel (LeanIsing.Quantum.trotter G M x y)) ∧
+          LeanIsing.Chain.Stationary (LeanIsing.Quantum.pathDistribution G M x y)
+            (LeanIsing.Layered.inducedKernel (LeanIsing.Quantum.trotter G M x y)) ∧
+          LeanIsing.Chain.Ergodic (LeanIsing.Layered.inducedKernel (LeanIsing.Quantum.trotter G M x y)) ∧
+          LeanIsing.Chain.GeometricConvergence (LeanIsing.Quantum.pathDistribution G M x y)
+            (LeanIsing.Layered.inducedKernel (LeanIsing.Quantum.trotter G M x y)) ∧
+          LeanIsing.Chain.Converges (LeanIsing.Quantum.pathDistribution G M x y)
+            (LeanIsing.Layered.inducedKernel (LeanIsing.Quantum.trotter G M x y)))),
     (``LeanIsing.Proofs.rejection_exact,
       ← `(∀ (M m k : Nat), k < m →
         (List.range' (M % m) (M - M % m)).countP (fun w => (w - M % m) % m == k) = M / m))
@@ -100,7 +139,11 @@ run_cmd do
     ``LeanIsing.Proofs.irreducible_within, ``LeanIsing.Proofs.Sim.stepPure_fst,
     ``LeanIsing.Proofs.unsat_flip, ``LeanIsing.Proofs.acceptLocal_eq,
     ``LeanIsing.Proofs.simulation_geometric, ``LeanIsing.Proofs.geometric_of_primitive,
-    ``LeanIsing.Proofs.converges_of_geometric, ``LeanIsing.Proofs.l1_contract]
+    ``LeanIsing.Proofs.converges_of_geometric, ``LeanIsing.Proofs.l1_contract,
+    ``LeanIsing.Proofs.general_stationary, ``LeanIsing.Proofs.general_ergodic,
+    ``LeanIsing.Proofs.general_converges, ``LeanIsing.Proofs.model_converges,
+    ``LeanIsing.Proofs.layered_acceptLocal_eq, ``LeanIsing.Proofs.transfer_eq_tensor,
+    ``LeanIsing.Proofs.Layered.Sim.stepPure_fst]
   for thm in checks.map (·.1) ++ others do
     checkAxioms thm
   logInfo m!"監査 OK: {checks.length} 個の主定理の主張は期待どおりで、これらと補助定理 {others.length} 個は\

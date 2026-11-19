@@ -413,26 +413,52 @@ theorem converges_of_geometric {P : Config n → Config n → Rat} {π : Config 
 
 /-! ## Metropolis 核への適用 -/
 
-variable {G : Graph} {x : Rat}
+section General
 
-theorem partition_pos (hx : 0 < x) : 0 < partition G x :=
+variable {w : Config n → Rat}
+
+theorem sum_weight_pos (hw : ∀ σ, 0 < w σ) : 0 < ((allConfigs n).map w).sum :=
   sum_pos_of_mem (fun _ hb => by
       obtain ⟨σ, _, rfl⟩ := List.mem_map.1 hb
-      exact Rat.le_of_lt (weight_pos hx σ))
-    (List.mem_map_of_mem (mem_allConfigs (allUp G.n))) (weight_pos hx _)
+      exact Rat.le_of_lt (hw σ))
+    (List.mem_map_of_mem (mem_allConfigs (allUp n))) (hw _)
 
-/-- Boltzmann 分布は確率分布。 -/
-theorem boltzmann_isDistribution (G : Graph) (x : Rat) (hx : 0 < x) :
-    IsDistribution (boltzmann G x) := by
-  have hZ := partition_pos (G := G) hx
+/-- 規格化した重み `w / Σ w` は確率分布。 -/
+theorem normalize_isDistribution (w : Config n → Rat) (hw : ∀ σ, 0 < w σ) :
+    IsDistribution (normalize w) := by
+  have hZ := sum_weight_pos hw
   refine ⟨fun σ => ?_, ?_⟩
-  · unfold boltzmann
+  · unfold normalize
     rw [Rat.div_def]
-    exact Rat.mul_nonneg (Rat.le_of_lt (weight_pos hx σ)) (Rat.le_of_lt (Rat.inv_pos.2 hZ))
-  · unfold boltzmann
+    exact Rat.mul_nonneg (Rat.le_of_lt (hw σ)) (Rat.le_of_lt (Rat.inv_pos.2 hZ))
+  · unfold normalize
     simp only [Rat.div_def]
     rw [sum_map_mul_right]
     exact Rat.mul_inv_cancel _ (Rat.ne_of_gt hZ)
+
+/-- **幾何収束（一般の重み）**：重みが正で、重みが減る反転が 1 つでもあれば、Metropolis 連鎖は
+任意の初期分布から `normalize w` へ幾何的に収束する。 -/
+theorem general_geometric (w : Config n → Rat) (hw : ∀ σ, 0 < w σ) (hn : 0 < n)
+    (hrej : ∃ σ₀ i₀, w (flip σ₀ i₀) < w σ₀) :
+    GeometricConvergence (normalize w) (metropolis w) :=
+  geometric_of_primitive (general_stochastic w hw hn) (normalize_isDistribution w hw)
+    (general_stationary w hw hn) (m := 2 * n) (by omega)
+    (general_ergodic_from w hw hrej (2 * n) (Nat.le_refl _))
+
+/-- **収束（一般の重み）**。 -/
+theorem general_converges (w : Config n → Rat) (hw : ∀ σ, 0 < w σ) (hn : 0 < n)
+    (hrej : ∃ σ₀ i₀, w (flip σ₀ i₀) < w σ₀) :
+    Converges (normalize w) (metropolis w) :=
+  converges_of_geometric (general_geometric w hw hn hrej)
+
+end General
+
+variable {G : Graph} {x : Rat}
+
+/-- Boltzmann 分布は確率分布。 -/
+theorem boltzmann_isDistribution (G : Graph) (x : Rat) (hx : 0 < x) :
+    IsDistribution (boltzmann G x) :=
+  normalize_isDistribution (weight G x) (weight_pos hx)
 
 theorem n_pos_of_bond (hG : ∃ b ∈ G.bonds, b.1 ≠ b.2) : 0 < G.n := by
   obtain ⟨⟨u, _⟩, _, _⟩ := hG
@@ -443,10 +469,9 @@ Boltzmann 分布へ幾何的に収束する（`m = 2n` ステップごとに L¹
 theorem metropolis_geometric (G : Graph) (x : Rat) (hx0 : 0 < x) (hx1 : x < 1)
     (hG : ∃ b ∈ G.bonds, b.1 ≠ b.2) :
     GeometricConvergence (boltzmann G x) (kernel G x) := by
-  have hn := n_pos_of_bond hG
-  exact geometric_of_primitive (stochastic G x hx0 hn) (boltzmann_isDistribution G x hx0)
-    (stationary G x hx0 hn) (m := 2 * G.n) (by omega)
-    (ergodic_from G x hx0 hx1 hG (2 * G.n) (Nat.le_refl _))
+  obtain ⟨⟨u, v⟩, hb, huv⟩ := hG
+  exact general_geometric (weight G x) (weight_pos hx0) (n_pos_of_bond ⟨(u, v), hb, huv⟩)
+    ⟨allUp G.n, u, weight_flip_allUp_lt hx0 hx1 hb huv⟩
 
 /-- **収束**：Metropolis 連鎖は任意の初期分布から Boltzmann 分布へ収束する。 -/
 theorem metropolis_converges (G : Graph) (x : Rat) (hx0 : 0 < x) (hx1 : x < 1)

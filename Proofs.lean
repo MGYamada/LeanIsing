@@ -3,5 +3,8 @@ import Proofs.DetailedBalance
 import Proofs.Ergodicity
 import Proofs.Exactness
 import Proofs.Convergence
+import Proofs.Model
+import Proofs.Layered
+import Proofs.Quantum
 import Proofs.Theorems
 import Proofs.Audit
