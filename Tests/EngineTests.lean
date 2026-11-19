@@ -122,5 +122,15 @@ def S3 := Lattice.square 3
 #guard bestRational (sqrtApprox 2 - 1) 100 == 41/99
 #guard bestRational (sqrtApprox 2 - 1) 200 == 70/169
 #guard showDec (tOfX (70/169)) 3 == "2.269"
+-- Boltzmann 因子は開区間 (0, 1) の中から選ぶ（端点 0, 1 に丸めない）
+#guard bestRationalIn01 (1/10000) 200 == 1/200
+#guard bestRationalIn01 (9999/10000) 200 == 199/200
+#guard bestRationalIn01 (sqrtApprox 2 - 1) 200 == 70/169
+#guard [1/10, 1, 10, 1000].all fun T => let x := xOfT T 100; 0 < x && x < 1
+-- ln は 0 の近くでも正確（引数を [1/2, 1] に縮めてから級数を使う）
+#guard showDec (lnApprox (1/1000)) 4 == "-6.9078"
+#guard showDec (lnApprox (1/2981)) 4 == "-8.0000"
+#guard showDec (lnApprox 2) 6 == "0.693147"
+#guard closeRel (101/100) 1 (1/100) && !closeRel (102/100) 1 (1/100)
 
 end LeanIsing.Tests

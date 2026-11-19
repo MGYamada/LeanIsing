@@ -165,6 +165,13 @@ def main (args : List String) : IO UInt32 := do
   let points : List (Option Rat × Rat) := match o.xs with
     | some xs => xs.map fun x => (none, x)
     | none => o.temps.map fun T => (some T, xOfT T o.qmax)
+  -- x は開区間 (0, 1) の中から選ぶ。丸めで温度が 1% 以上ずれるなら止める
+  for (T?, x) in points do
+    if let some T := T? then
+      unless closeRel (tOfX x) T (1 / 100) do
+        IO.eprintln s!"エラー: T = {showDec T 4} の x = exp(-2/T) を分母 {o.qmax} 以下の有理数で表すと \
+          {x}（T_x = {showDec (tOfX x) 4}）になり、T から 1% 以上ずれます。--qmax を大きくしてください。"
+        return 1
   let G := Lattice.square o.L
   IO.println s!"LeanIsing — 2 次元 Ising 模型の Metropolis 法（乱数・確率はすべて厳密有理数）"
   IO.println s!"L = {o.L}（{G.n} サイト、周期境界）、熱化 {o.therm} スイープ、\

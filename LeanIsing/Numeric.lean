@@ -8,7 +8,8 @@ import LeanIsing.Spec
 * `showDec`：有理数を小数で表示する（四捨五入）。
 * `expApprox` / `lnApprox`：温度 `T` と `x = exp(-2/T)` の換算用。テイラー級数を有理数で計算し、
   各ステップで `2^-128` 単位に丸める（浮動小数点数は使わない）。
-* `bestRational`：分母に上限をつけた最良有理近似。温度 `T` から `x` を決めるのに使う。
+* `bestRational` / `bestRationalIn01`：分母に上限をつけた最良有理近似（後者は開区間 `(0, 1)` の中から選ぶ）。
+  温度 `T` から Boltzmann 因子 `x` を決めるのに使う。
 * `onsagerM`：Onsager–Yang の自発磁化 `m(x) = (1 - sinh(2βJ)^(-4))^(1/8)`
   （無限に大きい正方格子での厳密解）。`sinh(2βJ) = (1/x - x)/2` なので、`x` から直接計算できる。
 -/
@@ -39,16 +40,30 @@ def expApprox (z : Rat) : Rat := Id.run do
     sum := sum + term
   return sum
 
-/-- `ln x`（`0 < x ≤ 1`）。`ln x = -2 artanh((1 - x)/(1 + x))`。 -/
-def lnApprox (x : Rat) : Rat := Id.run do
-  let y := trunc ((1 - x) / (1 + x))
+/-- `ln z`（`1/2 ≤ z ≤ 1`）。`ln z = -2 artanh((1 - z)/(1 + z))` の級数（`(1 - z)/(1 + z) ≤ 1/3`）。 -/
+def lnCore (z : Rat) : Rat := Id.run do
+  let y := trunc ((1 - z) / (1 + z))
   let y2 := trunc (y * y)
   let mut p := y
   let mut sum : Rat := 0
-  for k in [0:2000] do
+  for k in [0:100] do
     sum := sum + trunc (p / (2 * k + 1))
     p := trunc (p * y2)
   return -2 * sum
+
+/-- `ln x`（`x > 0`。`x ≤ 0` なら 0）。`x · 2^k ∈ [1/2, 1]` に縮めてから級数を使うので、
+`x` が 0 に近くても精度が落ちない。 -/
+def lnApprox (x : Rat) : Rat := Id.run do
+  if x ≤ 0 then return 0
+  let inv := 1 < x
+  let mut z := if inv then 1 / x else x
+  let mut k : Nat := 0
+  for _ in [0:100000] do
+    if z < 1 / 2 then
+      z := 2 * z
+      k := k + 1
+  let r := lnCore z + (k : Rat) * lnCore (1 / 2)
+  return if inv then -r else r
 
 /-- `r` に最も近い、分母が `qmax` 以下の有理数（最良有理近似）。 -/
 def bestRational (r : Rat) (qmax : Nat) : Rat := Id.run do
@@ -63,9 +78,30 @@ def bestRational (r : Rat) (qmax : Nat) : Rat := Id.run do
       err := e
   return best
 
-/-- 温度 `T` に対する `x = exp(-2/T)` の、分母 `qmax` 以下の最良有理近似。 -/
+/-- `r` に最も近い、開区間 `(0, 1)` の中の分母 `qmax` 以下の有理数（`qmax < 2` なら `1/2`）。
+Boltzmann 因子が端点 0（重み 0 で配位が凍結する）や 1 に丸められるのを防ぐ。 -/
+def bestRationalIn01 (r : Rat) (qmax : Nat) : Rat := Id.run do
+  let mut best : Rat := 1 / 2
+  let mut err : Rat := if best ≤ r then r - best else best - r
+  for q in [2:qmax + 1] do
+    let p0 := (r * q + 1 / 2).floor
+    let p : Int := if p0 < 1 then 1 else if p0 > q - 1 then q - 1 else p0
+    let c : Rat := (p : Rat) / q
+    let e := if c ≤ r then r - c else c - r
+    if e < err then
+      best := c
+      err := e
+  return best
+
+/-- 相対誤差 `|a - b| / |b|` が `tol` 以下か。 -/
+def closeRel (a b tol : Rat) : Bool :=
+  let d := if a ≤ b then b - a else a - b
+  let m := if b < 0 then -b else b
+  d ≤ tol * m
+
+/-- 温度 `T` に対する `x = exp(-2/T)` の、`(0, 1)` の中で分母 `qmax` 以下の最良有理近似。 -/
 def xOfT (T : Rat) (qmax : Nat := 100) : Rat :=
-  bestRational (1 / expApprox (2 / T)) qmax
+  bestRationalIn01 (1 / expApprox (2 / T)) qmax
 
 /-- `x = exp(-2/T)` に対応する温度 `T = -2 / ln x`。 -/
 def tOfX (x : Rat) : Rat := -2 / lnApprox x

@@ -165,8 +165,23 @@ def main (args : List String) : IO UInt32 := do
   if G.n < 2 then IO.eprintln "エラー: 空間サイトは 2 個以上にしてください"; return 1
   if o.exact && G.n > 6 then IO.eprintln "エラー: --exact は空間サイト数 ≤ 6 のときだけ使えます"; return 1
   let eps := o.beta / o.M
-  let x := bestRational (1 / expApprox (2 * eps)) o.qmax
+  -- 因子は開区間 (0, 1) の中から選ぶ（0 なら重みが 0 になって配位が凍結し、定理の仮定 0 < x, y も崩れる）
+  let x := bestRationalIn01 (1 / expApprox (2 * eps)) o.qmax
   let Jx := -(lnApprox x) / (2 * eps)
+  -- 丸めで結合定数が 1% 以上ずれるなら止める
+  unless closeRel Jx 1 (1 / 100) do
+    IO.eprintln s!"エラー: x = e^(-2β/M) = e^(-{showDec (2 * eps) 3}) を分母 {o.qmax} 以下の有理数で表すと \
+      {x}（J_x = {showDec Jx 4}）になり、J = 1 から 1% 以上ずれます。\
+      --qmax を大きくするか、M を大きくして β/M を小さくしてください。"
+    return 1
+  let ys := o.gammas.map fun Γ => (Γ, bestRationalIn01 (tanhApprox (eps * Γ)) o.qmax)
+  for (Γ, y) in ys do
+    let Γy := artanhApprox y / eps
+    unless closeRel Γy Γ (1 / 100) do
+      IO.eprintln s!"エラー: Γ = {showDec Γ 4} の y = tanh(βΓ/M) を分母 {o.qmax} 以下の有理数で表すと \
+        {y}（Γ_y = {showDec Γy 4}）になり、Γ から 1% 以上ずれます。\
+        --qmax を大きくするか、M を調整してください。"
+      return 1
   IO.println s!"LeanIsing — 横磁場 Ising 模型の経路積分量子モンテカルロ法（乱数・確率はすべて厳密有理数）"
   IO.println s!"空間格子 = {desc}、Trotter 数 M = {o.M}（世界線 {G.n * o.M} サイト）、β = {showDec o.beta 3}、\
     熱化 {o.therm} スイープ、測定 {o.sweeps} スイープ（{o.blocks} ブロック）、seed = {o.seed}"
@@ -179,9 +194,8 @@ def main (args : List String) : IO UInt32 := do
   IO.println header
   IO.println ("".pushn '-' (header.length + 4))
   let mut g := Rng.ofSeed o.seed
-  for Γ in o.gammas do
+  for (Γ, y) in ys do
     let t0 ← IO.monoMsNow
-    let y := bestRational (tanhApprox (eps * Γ)) o.qmax
     let Γy := artanhApprox y / eps
     let (row, g') := simulate o G x y g
     g := g'
